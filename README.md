@@ -1,2 +1,2 @@
-# gitpractice
-this is a little repository for me to practice using git and github!!
+# comparingevents
+this is a repository that hosts my SETI event comparison script!

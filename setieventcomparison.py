@@ -12,13 +12,16 @@ import copy
 from pathlib import Path
 import sys
 
-matplotlib.use('TkAgg')
-
 # Creating LWA-1 and LWA-SV dataframes
 
 paths = ['LWAmetadataCSVs/'+x for x in os.listdir('LWAmetadataCSVs')]
-lwa1df = pd.read_csv(paths[0])
-lwasvdf = pd.read_csv(paths[1])
+for file in paths:
+    if 'lwa1' in file:
+        lwa1file = file
+    elif 'lwa-sv' in file:
+        lwasvfile = file
+lwa1df = pd.read_csv(lwa1file)
+lwasvdf = pd.read_csv(lwasvfile)
 
 # Mapping files across both dataframes
 
@@ -255,18 +258,19 @@ filenamelist = []
 for x in pathlist1:
     slash = x.find('/')
     hyphen = x.find('-')
-    file = x[slash+1:hyphen]
+    filetype = x.find('.')
+    file = x[slash+1:hyphen]+"-"+x[filetype-4:filetype]
     filenamelist.append(file)
 
 for freq in range(0, len(adflist)):
-    afstart = adflist[freq] - 0.5
-    afstop = adflist[freq] + 0.5
+    afstart = adflist[freq] - 0.005
+    afstop = adflist[freq] + 0.005
     obs.plot_waterfall(logged=True, f_start=afstart, f_stop=afstop)
-    plt.savefig(fname=str(filenamelist[0])+"event"+str(freq)+".png", bbox_inches='tight', pad_inches=1)
+    plt.savefig(fname=str(filenamelist[0])+"event"+str(freq)+"-lwa1.png", bbox_inches='tight', pad_inches=1)
     plt.clf()
 for freq in range(0, len(bdflist)):
-    bfstart = bdflist[freq] - 0.5
-    bfstop = bdflist[freq] + 0.5
+    bfstart = bdflist[freq] - 0.005
+    bfstop = bdflist[freq] + 0.005
     obs1.plot_waterfall(logged=True, f_start=bfstart, f_stop=bfstop)
-    plt.savefig(fname=str(filenamelist[1])+"event"+str(freq)+".png", bbox_inches='tight', pad_inches=1)
+    plt.savefig(fname=str(filenamelist[1])+"event"+str(freq)+"-lwasv.png", bbox_inches='tight', pad_inches=1)
     plt.clf()

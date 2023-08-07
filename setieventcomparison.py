@@ -11,6 +11,7 @@ import pandas as pd
 import copy
 from pathlib import Path
 import sys
+from PIL import Image
 
 # Creating LWA-1 and LWA-SV dataframes
 
@@ -82,6 +83,17 @@ openedfile1.close()
 openedfile2 = open(orderedpathlist[1], 'r')
 stringfile2 = openedfile2.read()
 openedfile2.close()
+
+# Function to find duration of observation before processing files
+
+def findduration(singlestringfile):
+    obsposition = int(singlestringfile.find('obs_length: '))
+    newlineposition = int(singlestringfile[obsposition:].find('\n'))+obsposition
+    duration = float(singlestringfile[obsposition+12:newlineposition])
+    return duration
+
+lwa1duration = findduration(stringfile1)
+lwasvduration = findduration(stringfile2)
 
 # Functions to remove tabs, newlines, whitespaces, and everything except for header and data
 
@@ -175,69 +187,92 @@ count = 0
 svtophitlist = []
 svfqlist = []
 svdriftlist = []
+svsnrlist = []
 tophitlist = []
 frequencylist = []
 driftlist = []
+snrlist = []
 indexlist = []
 
 for x in newdf1.index:
     frequency = newdf1['Corrected_Frequency'][x]
-    fqhigh = frequency+0.002
-    fqlow = frequency-0.002
+    fqhigh = frequency+0.05
+    fqlow = frequency-0.05
     driftrate = newdf1['Drift_Rate'][x]
     tophitnumber = newdf1['Top_Hit_#'][x]
+    snr = newdf1['SNR'][x]
 
     y = newdf2['Corrected_Frequency'].between(fqlow, fqhigh, inclusive='both')
     boolseries = y.any(axis=0, skipna=True)
     if boolseries == True:
 
         mfqindex = y[y.values].index
-        mfqindex2 = mfqindex.item()
-        matchfq = newdf2.loc[mfqindex2]
+        mfqindexlength = len(mfqindex)
+
+        for value in mfqindex:
+            matchfq = newdf2.loc[value]
+            dr = matchfq["Drift_Rate"].item()
+
+            summ = dr+driftrate
+
+            if abs((driftrate - dr)/(driftrate)) <= 0.2:
 
 
-        dr = matchfq["Drift_Rate"].item()
+                print('\n', 'potential event found!', '\n', 'lwa1 row, fq, and dr: ', tophitnumber, \
+                  frequency, driftrate,'\n', 'lwasv row and matching fq: ', matchfq)
 
-        summ = dr+driftrate
+                count += 1
 
-        if abs((driftrate - dr)/(driftrate)) <= 0.2:
+                svtophit = newdf2['Top_Hit_#'].loc[value].item()
+                svfrequency = newdf2['Corrected_Frequency'].loc[value].item()
+                svdrift = newdf2['Drift_Rate'].loc[value].item()
+                svsnr = newdf2['SNR'].loc[value].item()
 
-            print('\n', 'potential event found!', '\n', 'lwa1 row, fq, and dr: ', tophitnumber, \
-              frequency, driftrate,'\n', 'lwasv row and matching fq: ', matchfq)
+                svtophitlist.append(svtophit)
+                svfqlist.append(svfrequency)
+                svdriftlist.append(svdrift)
+                svsnrlist.append(svsnr)
 
-            count += 1
+                tophitlist.append(tophitnumber)
+                frequencylist.append(frequency)
+                driftlist.append(driftrate)
+                snrlist.append(snr)
 
-            svtophit = newdf2['Top_Hit_#'].loc[mfqindex2].item()
-            svfrequency = newdf2['Corrected_Frequency'].loc[mfqindex2].item()
-            svdrift = newdf2['Drift_Rate'].loc[mfqindex2].item()
+                indexlist.append(x)
 
-            svtophitlist.append(svtophit)
-            svfqlist.append(svfrequency)
-            svdriftlist.append(svdrift)
+if count == 0:
+    print('\n', "no events found...")
+    print('\n', "exiting script now")
+    sys.exit()
+else:
+    print('\n', "event count: ", count, '\n')
 
-            tophitlist.append(tophitnumber)
-            frequencylist.append(frequency)
-            driftlist.append(driftrate)
-            indexlist.append(x)
-
-print('\n', "event count: ", count)
 
 # Displaying matching events as two dataframes (LWA-1 followed by LWA-SV)
 
-adf = newdf1.query("`Drift_Rate` in @driftlist and `Corrected_Frequency` in @frequencylist")
-bdf = newdf2.query("`Drift_Rate` in @svdriftlist and `Corrected_Frequency` in @svfqlist")
+adf = pd.DataFrame({'Telescope': 'LWA-1','Top_Hit_#': tophitlist,'Corrected_Frequency': frequencylist, \
+                        'Drift_Rate': driftlist,'SNR': snrlist})
+bdf = pd.DataFrame({'Telescope': 'LWA-SV','Top_Hit_#': svtophitlist,'Corrected_Frequency': svfqlist, \
+                         'Drift_Rate': svdriftlist,'SNR': svsnrlist})
 
-print(adf)
-print(bdf)
+print("For the following tables of events, row n in table A corresponds to row n in table B. Together, they represent a potential event!")
+print("LWA-1 event table:", adf)
+print("LWA-SV event table:", bdf)
 
 # Storing frequencies from events dataframes for future
 
-adflist = []
-bdflist = []
+afreqlist = []
+adrlist = []
+bfreqlist = []
+bdrlist = []
 for fq in adf['Corrected_Frequency']:
-    adflist.append(fq)
+    afreqlist.append(fq)
+for dr in adf['Drift_Rate']
+    adrlist.append(dr)
 for fq in bdf['Corrected_Frequency']:
-    bdflist.append(fq)
+    bfreqlist.append(fq)
+for dr in bdf['Drift_Rate']:
+    bdrlist.append(dr)
 
 # Inputting our .h5 directory containing two files of specific row and tuning frequency
 
@@ -246,7 +281,7 @@ h5paths = [datadir2 + '/' + x for x in os.listdir(datadir2) if x.endswith('.h5')
 
 h5pathlist  = order(h5paths)
 
-# Creating waterfall plots for each event found and saving them as individual .png files to current directory
+# Creating waterfall plots for each event found and saving them as .png files to current directory
 
 file_path = h5pathlist[0]
 obs = Waterfall(file_path, max_load=11)
@@ -255,22 +290,56 @@ file_path1 = h5pathlist[1]
 obs1 = Waterfall(file_path1, max_load=11)
 
 filenamelist = []
-for x in pathlist1:
+for x in h5pathlist:
     slash = x.find('/')
     hyphen = x.find('-')
     filetype = x.find('.')
-    file = x[slash+1:hyphen]+"-"+x[filetype-4:filetype]
-    filenamelist.append(file)
+    if 'cor' in x:
+        cor = x.find('cor')
+        file = x[slash+1:hyphen]+"-"+x[filetype-4:filetype]+x[cor:cor+3]
+        filenamelist.append(file)
+    else:
+        file = x[slash+1:hyphen]+"-"+x[filetype-4:filetype]
+        filenamelist.append(file)
 
-for freq in range(0, len(adflist)):
-    afstart = adflist[freq] - 0.005
-    afstop = adflist[freq] + 0.005
+turbo = datadir.find('turbo')
+rowtuning = datadir[:turbo]
+
+for x in range(0, len(afreqlist)):
+    afstart = afreqlist[x] - 0.005
+    afstop = afreqlist[x] + 0.005
+    adrift = adrlist[x]/(1e6)
+
+    bfstart = bfreqlist[x] - 0.005
+    bfstop = bfreqlist[x] + 0.005
+    bdrift = bdrlist[x]/(1e6)
+
     obs.plot_waterfall(logged=True, f_start=afstart, f_stop=afstop)
-    plt.savefig(fname=str(filenamelist[0])+"event"+str(freq)+"-lwa1.png", bbox_inches='tight', pad_inches=1)
+    plt.title("LWA-1 event"+str(x)+": freq="+str(afreqlist[x])+", dr="+str(adrlist[x]))
+    plt.plot([afreqlist[x], afreqlist[x]+(adrift*lwa1duration)], [0, lwa1duration], ls = (0, (3, 10)), label = 'Dotted Line', c = '#ff5f1f')
+    pngname1 = str(filenamelist[0])+"event"+str(x)+"-lwa1.png"
+    plt.savefig(fname=pngname1, bbox_inches='tight', pad_inches=0.5)
     plt.clf()
-for freq in range(0, len(bdflist)):
-    bfstart = bdflist[freq] - 0.005
-    bfstop = bdflist[freq] + 0.005
+
     obs1.plot_waterfall(logged=True, f_start=bfstart, f_stop=bfstop)
-    plt.savefig(fname=str(filenamelist[1])+"event"+str(freq)+"-lwasv.png", bbox_inches='tight', pad_inches=1)
+    plt.title("LWA-SV event"+str(x)+": freq="+str(bfreqlist[x])+", dr="+str(bdrlist[x]))
+    plt.plot([bfreqlist[x], bfreqlist[x]+(bdrift*lwasvduration)], [0, lwasvduration], ls = (0, (3, 10)), label = 'Dotted Line', c = '#ff5f1f')
+    pngnamesv = str(filenamelist[1])+"event"+str(x)+"-lwasv.png"
+    plt.savefig(fname=pngnamesv, bbox_inches='tight', pad_inches=0.5)
     plt.clf()
+
+    png1 = Image.open(pngname1)
+    pngsv = Image.open(pngnamesv)
+
+    len1, ht1 = png1.size
+    lensv, htsv = pngsv.size
+
+    lentotal = len1 + lensv
+    height = max(ht1, htsv)
+
+    eventfig = Image.new("RGB", (lentotal, height))
+    eventfig.paste(png1, (0, 0))
+    eventfig.paste(pngsv, (len1, 0))
+    eventfig.save(fp=rowtuning+"event"+str(x)+".png")
+
+print('\n', "plots have been generated and saved as .png files!")
